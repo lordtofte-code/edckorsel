@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDC Bogense – Kørselsregistrering</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+:root {
+  --navy:#0f1f3d; --navy-mid:#1a3260;
+  --accent:#e8a030; --accent-light:#f5c870;
+  --cream:#faf8f4; --paper:#f2ede4;
+  --text:#1a1a2e; --muted:#6b7280; --border:#d8d0c4;
+  --success:#2d7a4f; --danger:#c0392b;
+  --shadow:0 4px 24px rgba(15,31,61,0.12);
+  --shadow-lg:0 12px 48px rgba(15,31,61,0.2);
+}
+body { font-family:'DM Sans',sans-serif; background:var(--cream); color:var(--text); min-height:100vh; line-height:1.6; }
+
+/* ── HEADER ── */
+header { background:var(--navy); padding:0 2rem; position:sticky; top:0; z-index:100; box-shadow:var(--shadow); }
+.header-inner { max-width:900px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; height:72px; gap:1rem; }
+.header-brand { display:flex; align-items:center; gap:0.9rem; }
+.edc-logo-wrap { background:white; border-radius:8px; padding:5px 9px; display:flex; align-items:center; flex-shrink:0; }
+.edc-logo-text { font-weight:700; font-size:1.25rem; letter-spacing:0.12em; color:#c8181e; line-height:1; }
+.header-titles { line-height:1.25; }
+.header-company { font-size:0.7rem; font-weight:600; color:rgba(250,248,244,0.5); text-transform:uppercase; letter-spacing:0.1em; }
+.header-appname { font-family:'DM Serif Display',serif; font-size:1.15rem; color:var(--cream); }
+.header-appname span { color:var(--accent); }
+.header-km { font-size:0.78rem; color:rgba(250,248,244,0.6); text-align:right; line-height:1.3; flex-shrink:0; }
+.header-km strong { display:block; font-size:1.2rem; color:var(--accent-light); font-weight:600; }
+
+/* ── LAYOUT ── */
+main { max-width:900px; margin:0 auto; padding:2rem 1.5rem 4rem; }
+.section-title { font-family:'DM Serif Display',serif; font-size:1.1rem; color:var(--navy); margin-bottom:1rem; display:flex; align-items:center; gap:0.5rem; }
+.section-title::after { content:''; flex:1; height:1px; background:var(--border); margin-left:0.5rem; }
+.card { background:white; border-radius:16px; padding:1.5rem; box-shadow:var(--shadow); margin-bottom:1.5rem; border:1px solid rgba(216,208,196,0.5); }
+
+/* ── FORM ── */
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+.form-group { display:flex; flex-direction:column; gap:0.4rem; position:relative; }
+.form-group.full { grid-column:1/-1; }
+label { font-size:0.78rem; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; }
+input[type="text"],input[type="date"],input[type="number"],select {
+  padding:0.65rem 0.9rem; border:1.5px solid var(--border); border-radius:10px;
+  font-family:'DM Sans',sans-serif; font-size:0.95rem; color:var(--text);
+  background:var(--cream); transition:border-color 0.2s,box-shadow 0.2s; outline:none; width:100%;
+}
+input:focus,select:focus { border-color:var(--navy-mid); box-shadow:0 0 0 3px rgba(26,50,96,0.1); background:white; }
+
+/* ── AUTOCOMPLETE ── */
+.autocomplete-wrap { position:relative; }
+.input-row { display:flex; gap:0.5rem; align-items:center; }
+.input-row input { flex:1; }
+.autocomplete-list {
+  position:absolute; top:calc(100% + 4px); left:0; right:0;
+  background:white; border:1.5px solid var(--border); border-radius:10px;
+  box-shadow:var(--shadow-lg); z-index:200; max-height:220px; overflow-y:auto; display:none;
+}
+.autocomplete-list.open { display:block; }
+.ac-item { padding:0.65rem 1rem; cursor:pointer; font-size:0.88rem; border-bottom:1px solid var(--border); display:flex; align-items:flex-start; gap:0.6rem; transition:background 0.12s; }
+.ac-item:last-child { border-bottom:none; }
+.ac-item:hover,.ac-item.active { background:var(--paper); }
+.ac-icon { font-size:0.9rem; flex-shrink:0; margin-top:2px; }
+.ac-main { font-weight:500; color:var(--text); line-height:1.3; }
+.ac-sub { font-size:0.77rem; color:var(--muted); }
+.ac-loading { padding:0.7rem 1rem; font-size:0.82rem; color:var(--muted); display:flex; align-items:center; gap:0.5rem; }
+.ac-loading::before { content:''; width:14px; height:14px; border:2px solid var(--border); border-top-color:var(--navy); border-radius:50%; animation:spin 0.7s linear infinite; flex-shrink:0; }
+
+/* ── DISTANCE ── */
+.distance-preview { background:linear-gradient(135deg,var(--navy),var(--navy-mid)); color:white; border-radius:10px; padding:0.8rem 1.2rem; display:flex; align-items:center; justify-content:space-between; min-height:52px; }
+.dp-label { font-size:0.78rem; opacity:0.7; }
+.dp-value { font-family:'DM Serif Display',serif; font-size:1.5rem; color:var(--accent-light); }
+#distanceSpinner { width:20px; height:20px; border:2px solid rgba(255,255,255,0.3); border-top-color:var(--accent-light); border-radius:50%; animation:spin 0.8s linear infinite; display:none; }
+@keyframes spin { to{transform:rotate(360deg);} }
+
+/* ── BUTTONS ── */
+.btn { padding:0.7rem 1.4rem; border:none; border-radius:10px; font-family:'DM Sans',sans-serif; font-size:0.9rem; font-weight:600; cursor:pointer; transition:transform 0.15s,box-shadow 0.15s; display:inline-flex; align-items:center; gap:0.4rem; white-space:nowrap; }
+.btn:active { transform:translateY(1px); }
+.btn-primary { background:var(--navy); color:white; box-shadow:0 4px 12px rgba(15,31,61,0.25); }
+.btn-primary:hover { background:var(--navy-mid); }
+.btn-accent { background:var(--accent); color:white; box-shadow:0 4px 12px rgba(232,160,48,0.3); }
+.btn-accent:hover { background:#d4891c; }
+.btn-outline { background:transparent; color:var(--navy); border:1.5px solid var(--border); }
+.btn-outline:hover { border-color:var(--navy); background:var(--paper); }
+.btn-gps { background:#e8f5e9; color:#2d7a4f; border:1.5px solid #a5d6a7; padding:0.65rem 0.9rem; }
+.btn-gps:hover { background:#c8e6c9; }
+.btn-edit { background:transparent; color:var(--navy-mid); border:1.5px solid rgba(26,50,96,0.2); padding:0.35rem 0.65rem; font-size:0.8rem; }
+.btn-edit:hover { background:var(--paper); border-color:var(--navy-mid); }
+.btn-danger { background:transparent; color:var(--danger); border:1.5px solid rgba(192,57,43,0.25); padding:0.35rem 0.65rem; font-size:0.8rem; }
+.btn-danger:hover { background:rgba(192,57,43,0.06); border-color:var(--danger); }
+.btn-reset { background:rgba(192,57,43,0.07); color:var(--danger); border:1.5px solid rgba(192,57,43,0.25); }
+.btn-reset:hover { background:rgba(192,57,43,0.14); }
+.btn-row { display:flex; gap:0.75rem; margin-top:1.2rem; flex-wrap:wrap; }
+
+/* ── SAVED ADDRESSES ── */
+.addr-chips { display:flex; flex-wrap:wrap; gap:0.4rem; margin-top:0.5rem; }
+.addr-chip { display:inline-flex; align-items:center; gap:0.3rem; background:var(--paper); border:1.5px solid var(--border); border-radius:20px; padding:0.3rem 0.75rem; font-size:0.8rem; font-weight:500; color:var(--navy); cursor:pointer; transition:background 0.15s,border-color 0.15s; user-select:none; }
+.addr-chip:hover { background:var(--navy); color:white; border-color:var(--navy); }
+.chip-del { font-size:0.75rem; opacity:0.5; margin-left:0.2rem; cursor:pointer; line-height:1; }
+.chip-del:hover { opacity:1; color:var(--danger); }
+.addr-add-row { display:flex; gap:0.5rem; margin-top:0.75rem; flex-wrap:wrap; }
+.addr-add-row input { flex:1; min-width:140px; }
+.addr-empty { font-size:0.82rem; color:var(--muted); font-style:italic; }
+
+/* ── FILTER & STATS BAR ── */
+.filter-bar { display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap; }
+.filter-bar .form-group { flex:1; min-width:130px; }
+.stats-row {
+  display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-top:1rem;
+}
+.stat-box { background:linear-gradient(135deg,var(--navy),var(--navy-mid)); color:white; border-radius:12px; padding:1rem 1.2rem; }
+.stat-label { font-size:0.75rem; opacity:0.7; text-transform:uppercase; letter-spacing:0.06em; }
+.stat-value { font-family:'DM Serif Display',serif; font-size:1.6rem; color:var(--accent-light); line-height:1.1; margin-top:0.1rem; }
+.stat-sub { font-size:0.75rem; opacity:0.55; margin-top:0.1rem; }
+
+/* ── TABLE ── */
+.table-controls { display:flex; gap:0.75rem; align-items:center; padding:1rem 1.5rem; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.table-controls select { width:auto; min-width:160px; padding:0.5rem 0.8rem; font-size:0.85rem; }
+.month-label { font-size:0.82rem; color:var(--muted); }
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:0.88rem; }
+thead { background:var(--navy); }
+thead th { padding:0.8rem 1rem; color:rgba(250,248,244,0.8); font-weight:500; text-align:left; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.07em; white-space:nowrap; }
+tbody tr { border-bottom:1px solid var(--border); transition:background 0.15s; }
+tbody tr:last-child { border-bottom:none; }
+tbody tr:hover { background:var(--paper); }
+.month-group-row td { background:var(--paper); font-weight:700; font-size:0.78rem; color:var(--navy); text-transform:uppercase; letter-spacing:0.08em; padding:0.5rem 1rem; }
+td { padding:0.8rem 1rem; vertical-align:middle; }
+.td-km { font-weight:600; color:var(--navy-mid); white-space:nowrap; }
+.td-date { color:var(--muted); white-space:nowrap; font-size:0.85rem; }
+.td-addr { max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.td-note { color:var(--muted); font-style:italic; font-size:0.82rem; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.td-actions { display:flex; gap:0.4rem; }
+.empty-state { text-align:center; padding:3rem 1rem; color:var(--muted); }
+.empty-state .icon { font-size:2.5rem; margin-bottom:0.5rem; }
+
+/* ── MODAL ── */
+.modal-overlay { position:fixed; inset:0; background:rgba(15,31,61,0.55); z-index:500; display:none; align-items:center; justify-content:center; padding:1rem; backdrop-filter:blur(3px); }
+.modal-overlay.open { display:flex; }
+.modal { background:white; border-radius:20px; padding:2rem; width:100%; max-width:520px; box-shadow:var(--shadow-lg); animation:modalIn 0.2s ease; }
+@keyframes modalIn { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+.modal-title { font-family:'DM Serif Display',serif; font-size:1.3rem; color:var(--navy); margin-bottom:1.2rem; }
+.modal-footer { display:flex; gap:0.75rem; margin-top:1.5rem; justify-content:flex-end; flex-wrap:wrap; }
+
+/* ── TOAST ── */
+#toast { position:fixed; bottom:1.5rem; right:1.5rem; background:var(--success); color:white; padding:0.8rem 1.4rem; border-radius:12px; font-size:0.88rem; font-weight:500; box-shadow:var(--shadow-lg); transform:translateY(80px); opacity:0; transition:transform 0.3s,opacity 0.3s; z-index:999; max-width:280px; }
+#toast.show { transform:translateY(0); opacity:1; }
+#toast.error { background:var(--danger); }
+
+@media(max-width:600px){
+  .form-grid{grid-template-columns:1fr}
+  .form-group.full{grid-column:auto}
+  .filter-bar{flex-direction:column}
+  header,.work-bar{padding:0 1rem}
+  .modal{padding:1.5rem}
+  .stats-row{grid-template-columns:1fr 1fr}
+  .stats-row .stat-box:last-child{grid-column:1/-1}
+  .work-timer{display:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="edc-logo-wrap"><span class="edc-logo-text">EDC</span></div>
+      <div class="header-titles">
+        <div class="header-company">EDC Bogense</div>
+        <div class="header-appname">Kørsels<span>reg.</span></div>
+      </div>
+    </div>
+    <div class="header-km">
+      <span>Total registreret</span>
+      <strong id="totalKmHeader">0 km</strong>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- REGISTRÉR NY KØRSEL -->
+  <div class="section-title">✦ Registrér ny kørsel</div>
+  <div class="card" id="tripFormCard">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Dato</label>
+        <input type="date" id="tripDate">
+      </div>
+      <div class="form-group">
+        <label>Formål / Note</label>
+        <input type="text" id="tripNote" placeholder="Fx. kundemøde, fremvisning...">
+      </div>
+      <div class="form-group full">
+        <label>Fra adresse</label>
+        <div class="autocomplete-wrap">
+          <div class="input-row">
+            <input type="text" id="tripFrom" placeholder="Fx. Bogense, Nordfyn" autocomplete="off"
+              oninput="acSearch(this,'fromList')" onkeydown="acKey(event,'fromList','tripFrom')">
+            <button class="btn btn-gps" onclick="getGPS('tripFrom')" title="Brug min placering">📍 GPS</button>
+          </div>
+          <div class="autocomplete-list" id="fromList"></div>
+        </div>
+        <div class="addr-chips" id="fromChips"></div>
+      </div>
+      <div class="form-group full">
+        <label>Til adresse</label>
+        <div class="autocomplete-wrap">
+          <div class="input-row">
+            <input type="text" id="tripTo" placeholder="Fx. Odense, Hjallesevej 5" autocomplete="off"
+              oninput="acSearch(this,'toList')" onkeydown="acKey(event,'toList','tripTo')">
+            <button class="btn btn-gps" onclick="getGPS('tripTo')" title="Brug min placering">📍 GPS</button>
+          </div>
+          <div class="autocomplete-list" id="toList"></div>
+        </div>
+        <div class="addr-chips" id="toChips"></div>
+      </div>
+      <div class="form-group full">
+        <label>Beregnet afstand</label>
+        <div class="distance-preview">
+          <div>
+            <div class="dp-label">Vejafstand (tur)</div>
+            <div class="dp-value" id="distanceDisplay">— km</div>
+          </div>
+          <div id="distanceSpinner"></div>
+          <button class="btn btn-outline" style="background:rgba(255,255,255,0.1);color:white;border-color:rgba(255,255,255,0.25);" onclick="calculateDistance()">Beregn</button>
+        </div>
+      </div>
+      <div class="form-group full" id="manualGroup" style="display:none">
+        <label>Eller indtast afstand manuelt (km)</label>
+        <input type="number" id="manualKm" min="0" step="0.1" placeholder="0.0">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="addTrip()">➕ Tilføj kørsel</button>
+      <button class="btn btn-outline" onclick="toggleManual()">✏️ Manuel km</button>
+      <button class="btn btn-outline" onclick="clearForm()">✕ Ryd</button>
+    </div>
+  </div>
+
+  <!-- GEMTE ADRESSER -->
+  <div class="section-title">✦ Gemte adresser</div>
+  <div class="card">
+    <div id="savedAddrList"><span class="addr-empty">Ingen gemte adresser endnu</span></div>
+    <div class="addr-add-row">
+      <input type="text" id="newAddrName" placeholder="Navn, fx. Arbejdet">
+      <input type="text" id="newAddrValue" placeholder="Adresse, fx. Adelgade 3, Bogense">
+      <button class="btn btn-primary" onclick="addSavedAddress()" style="padding:0.65rem 1rem">➕ Gem adresse</button>
+    </div>
+  </div>
+
+  <!-- STATISTIK & EKSPORT -->
+  <div class="section-title">✦ Statistik & eksport</div>
+  <div class="card">
+    <div class="filter-bar">
+      <div class="form-group">
+        <label>Fra dato</label>
+        <input type="date" id="filterFrom">
+      </div>
+      <div class="form-group">
+        <label>Til dato</label>
+        <input type="date" id="filterTo">
+      </div>
+      <button class="btn btn-primary" onclick="applyFilter()" style="margin-bottom:0">Beregn periode</button>
+      <button class="btn btn-accent" onclick="exportExcel()" style="margin-bottom:0">⬇ Excel</button>
+      <button class="btn btn-outline" onclick="clearFilter()" style="margin-bottom:0">Vis alle</button>
+    </div>
+    <div class="stats-row" id="statsRow" style="display:none">
+      <div class="stat-box">
+        <div class="stat-label">Kilometer</div>
+        <div class="stat-value" id="statKm">0</div>
+        <div class="stat-sub" id="statTrips">0 ture</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Godtgørelse</div>
+        <div class="stat-value" id="statReimb">0 kr</div>
+        <div class="stat-sub">á 3,99 kr/km</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Gns. pr. tur</div>
+        <div class="stat-value" id="statAvg">0</div>
+        <div class="stat-sub">km</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REGISTRERINGER -->
+  <div class="section-title">✦ Registreringer</div>
+  <div class="card" style="padding:0;overflow:hidden;">
+    <div class="table-controls">
+      <div class="form-group" style="margin:0;min-width:160px">
+        <select id="monthFilter" onchange="renderTable(trips)">
+          <option value="all">Alle måneder</option>
+        </select>
+      </div>
+      <span class="month-label" id="monthSummary"></span>
+      <div style="margin-left:auto;display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <button class="btn btn-outline" style="font-size:0.82rem;padding:0.45rem 0.9rem" onclick="exportExcelFiltered()">⬇ Eksportér visning</button>
+        <button class="btn btn-reset" style="font-size:0.82rem;padding:0.45rem 0.9rem" onclick="resetAllTrips()">🗑 Nulstil alle ture</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Dato</th><th>Fra</th><th>Til</th><th>Km</th><th>Note</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="tripsBody">
+          <tr><td colspan="6"><div class="empty-state"><div class="icon">🚗</div><p>Ingen kørsler registreret endnu</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<!-- EDIT MODAL -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-title">✏️ Rediger kørsel</div>
+    <input type="hidden" id="editId">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Dato</label>
+        <input type="date" id="editDate">
+      </div>
+      <div class="form-group">
+        <label>Note / Formål</label>
+        <input type="text" id="editNote" placeholder="Fx. kundemøde...">
+      </div>
+      <div class="form-group full">
+        <label>Fra adresse</label>
+        <input type="text" id="editFrom">
+      </div>
+      <div class="form-group full">
+        <label>Til adresse</label>
+        <input type="text" id="editTo">
+      </div>
+      <div class="form-group full">
+        <label>Kilometer (km)</label>
+        <input type="number" id="editKm" min="0" step="0.1">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeEdit()">Annuller</button>
+      <button class="btn btn-primary" onclick="saveEdit()">💾 Gem ændringer</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════ */
+let trips = JSON.parse(localStorage.getItem('trips_v2') || '[]');
+let savedAddresses = JSON.parse(localStorage.getItem('saved_addresses') || '[]');
+let calculatedKm = null;
+let acTimers = {};
+
+document.getElementById('tripDate').value = new Date().toISOString().split('T')[0];
+renderTable(trips);
+updateTotal();
+renderAddresses();
+buildMonthFilter();
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.autocomplete-wrap'))
+    document.querySelectorAll('.autocomplete-list').forEach(l => l.classList.remove('open'));
+});
+
+/* ═══════════════════════════════════════════
+   PERSIST
+═══════════════════════════════════════════ */
+function save() { localStorage.setItem('trips_v2', JSON.stringify(trips)); }
+function saveAddresses() { localStorage.setItem('saved_addresses', JSON.stringify(savedAddresses)); }
+
+/* ═══════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════ */
+function fmt(d) {
+  if (!d) return '';
+  return new Date(d + 'T00:00:00').toLocaleDateString('da-DK', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+function monthKey(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('da-DK', { month:'long', year:'numeric' });
+}
+function showToast(msg, isError=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (isError ? ' error' : '');
+  setTimeout(() => t.className = '', 3000);
+}
+
+/* ═══════════════════════════════════════════
+   GPS
+═══════════════════════════════════════════ */
+function getGPS(fieldId) {
+  if (!navigator.geolocation) { showToast('GPS ikke tilgængeligt', true); return; }
+  showToast('📍 Henter placering…');
+  navigator.geolocation.getCurrentPosition(async pos => {
+    try {
+      const { latitude: lat, longitude: lon } = pos.coords;
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+      const d = await r.json();
+      const a = d.address;
+      const parts = [a.road, a.house_number, a.postcode, a.city||a.town||a.village].filter(Boolean);
+      document.getElementById(fieldId).value = parts.join(', ');
+      calculatedKm = null;
+      document.getElementById('distanceDisplay').textContent = '— km';
+      showToast('✓ Placering indsat');
+    } catch { showToast('Kunne ikke slå adresse op', true); }
+  }, () => showToast('GPS-adgang nægtet – tillad lokation i browser', true), { timeout:8000 });
+}
+
+/* ═══════════════════════════════════════════
+   AUTOCOMPLETE
+═══════════════════════════════════════════ */
+async function acSearch(input, listId) {
+  const q = input.value.trim();
+  const list = document.getElementById(listId);
+  clearTimeout(acTimers[listId]);
+  if (q.length < 2) { list.classList.remove('open'); return; }
+  const saved = savedAddresses.filter(a =>
+    a.name.toLowerCase().includes(q.toLowerCase()) || a.value.toLowerCase().includes(q.toLowerCase())
+  );
+  acTimers[listId] = setTimeout(async () => {
+    list.innerHTML = '<div class="ac-loading">Søger…</div>';
+    list.classList.add('open');
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q+', Danmark')}&limit=6&addressdetails=1`);
+      const results = await r.json();
+      const items = [];
+      saved.forEach(a => {
+        const esc = a.value.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        items.push(`<div class="ac-item" onmousedown="acSelect('${input.id}','${listId}','${esc}')">
+          <span class="ac-icon">⭐</span>
+          <div><div class="ac-main">${a.name}</div><div class="ac-sub">${a.value}</div></div></div>`);
+      });
+      results.forEach(res => {
+        const a = res.address||{};
+        const line1 = [a.road,a.house_number].filter(Boolean).join(' ')||res.display_name.split(',')[0];
+        const line2 = [a.postcode,a.city||a.town||a.village||a.county].filter(Boolean).join(' ');
+        const full = [line1,line2].filter(Boolean).join(', ');
+        const esc = full.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        items.push(`<div class="ac-item" onmousedown="acSelect('${input.id}','${listId}','${esc}')">
+          <span class="ac-icon">📍</span>
+          <div><div class="ac-main">${line1}</div><div class="ac-sub">${line2}</div></div></div>`);
+      });
+      list.innerHTML = items.length ? items.join('') : '<div class="ac-loading" style="animation:none">Ingen resultater</div>';
+    } catch { list.innerHTML = '<div class="ac-loading" style="animation:none">Søgning fejlede</div>'; }
+  }, 380);
+}
+function acSelect(inputId, listId, value) {
+  document.getElementById(inputId).value = value;
+  document.getElementById(listId).classList.remove('open');
+  calculatedKm = null;
+  document.getElementById('distanceDisplay').textContent = '— km';
+}
+function acKey(e, listId, inputId) {
+  const list = document.getElementById(listId);
+  const items = [...list.querySelectorAll('.ac-item')];
+  let ai = items.findIndex(i => i.classList.contains('active'));
+  if (e.key==='ArrowDown'){e.preventDefault();items[ai]?.classList.remove('active');items[(ai+1)%items.length]?.classList.add('active');}
+  else if(e.key==='ArrowUp'){e.preventDefault();items[ai]?.classList.remove('active');items[(ai-1+items.length)%items.length]?.classList.add('active');}
+  else if(e.key==='Enter'&&ai>-1){e.preventDefault();items[ai].dispatchEvent(new MouseEvent('mousedown'));}
+  else if(e.key==='Escape'){list.classList.remove('open');}
+}
+
+/* ═══════════════════════════════════════════
+   SAVED ADDRESSES
+═══════════════════════════════════════════ */
+function addSavedAddress() {
+  const name = document.getElementById('newAddrName').value.trim();
+  const value = document.getElementById('newAddrValue').value.trim();
+  if (!name||!value){showToast('Udfyld både navn og adresse',true);return;}
+  savedAddresses.push({id:Date.now(),name,value});
+  saveAddresses(); renderAddresses();
+  document.getElementById('newAddrName').value='';
+  document.getElementById('newAddrValue').value='';
+  showToast(`✓ "${name}" gemt`);
+}
+function deleteSavedAddress(id) {
+  savedAddresses = savedAddresses.filter(a=>a.id!==id);
+  saveAddresses(); renderAddresses();
+}
+function setField(fieldId, value) {
+  document.getElementById(fieldId).value = value;
+  calculatedKm = null;
+  document.getElementById('distanceDisplay').textContent = '— km';
+}
+function renderAddresses() {
+  const list = document.getElementById('savedAddrList');
+  const fromChips = document.getElementById('fromChips');
+  const toChips = document.getElementById('toChips');
+  if (!savedAddresses.length) {
+    list.innerHTML='<span class="addr-empty">Ingen gemte adresser endnu</span>';
+    fromChips.innerHTML=''; toChips.innerHTML=''; return;
+  }
+  list.innerHTML='<div class="addr-chips">'+savedAddresses.map(a=>`
+    <span class="addr-chip" style="cursor:default">
+      <strong>${a.name}</strong>&nbsp;·&nbsp;${a.value}
+      <span class="chip-del" onclick="deleteSavedAddress(${a.id})">✕</span>
+    </span>`).join('')+'</div>';
+  const chips=(fid)=>savedAddresses.map(a=>{
+    const esc=a.value.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return`<span class="addr-chip" onclick="setField('${fid}','${esc}')">📍 ${a.name}</span>`;
+  }).join('');
+  fromChips.innerHTML=chips('tripFrom');
+  toChips.innerHTML=chips('tripTo');
+}
+
+/* ═══════════════════════════════════════════
+   FORM
+═══════════════════════════════════════════ */
+function toggleManual() {
+  const g=document.getElementById('manualGroup');
+  g.style.display=g.style.display==='none'?'block':'none';
+}
+function clearForm() {
+  ['tripFrom','tripTo','tripNote','manualKm'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('tripDate').value=new Date().toISOString().split('T')[0];
+  document.getElementById('distanceDisplay').textContent='— km';
+  document.getElementById('manualGroup').style.display='none';
+  calculatedKm=null;
+}
+
+/* ═══════════════════════════════════════════
+   DISTANCE
+═══════════════════════════════════════════ */
+async function calculateDistance() {
+  const from=document.getElementById('tripFrom').value.trim();
+  const to=document.getElementById('tripTo').value.trim();
+  if(!from||!to){showToast('Udfyld begge adresser først',true);return;}
+  const spinner=document.getElementById('distanceSpinner');
+  const display=document.getElementById('distanceDisplay');
+  spinner.style.display='block'; display.textContent='…'; calculatedKm=null;
+  try {
+    const geo=async(addr)=>{
+      const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr+', Danmark')}&limit=1`);
+      const d=await r.json();
+      if(!d.length) throw new Error();
+      return{lat:d[0].lat,lon:d[0].lon};
+    };
+    const[a,b]=await Promise.all([geo(from),geo(to)]);
+    const rd=await(await fetch(`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=false`)).json();
+    if(rd.code!=='Ok') throw new Error();
+    calculatedKm=parseFloat((rd.routes[0].distance/1000).toFixed(1));
+    display.textContent=`${calculatedKm} km`;
+  } catch {
+    display.textContent='⚠ Ikke fundet';
+    showToast('Kunne ikke beregne rute – prøv manuel km',true);
+  } finally { spinner.style.display='none'; }
+}
+
+/* ═══════════════════════════════════════════
+   ADD TRIP
+═══════════════════════════════════════════ */
+function addTrip() {
+  const date=document.getElementById('tripDate').value;
+  const from=document.getElementById('tripFrom').value.trim();
+  const to=document.getElementById('tripTo').value.trim();
+  const note=document.getElementById('tripNote').value.trim();
+  const manualVal=parseFloat(document.getElementById('manualKm').value);
+  if(!date||!from||!to){showToast('Udfyld dato, fra og til adresse',true);return;}
+  let km=calculatedKm;
+  if(!km&&manualVal>0) km=manualVal;
+  if(!km){showToast('Beregn afstand eller indtast manuelt',true);return;}
+  trips.push({id:Date.now(),date,from,to,note,km});
+  trips.sort((a,b)=>b.date.localeCompare(a.date));
+  save(); buildMonthFilter(); renderTable(trips); updateTotal(); clearForm();
+  showToast(`✓ ${km} km tilføjet`);
+}
+
+/* ═══════════════════════════════════════════
+   DELETE & RESET
+═══════════════════════════════════════════ */
+function deleteTrip(id) {
+  if(!confirm('Slet denne kørsel?')) return;
+  trips=trips.filter(t=>t.id!==id);
+  save(); buildMonthFilter(); renderTable(trips); updateTotal();
+}
+function resetAllTrips() {
+  if(!confirm('Er du sikker på du vil slette ALLE kørsler?\nDette kan ikke fortrydes.')) return;
+  trips=[];
+  save(); buildMonthFilter(); renderTable(trips); updateTotal();
+  showToast('Alle ture nulstillet');
+}
+
+/* ═══════════════════════════════════════════
+   EDIT
+═══════════════════════════════════════════ */
+function openEdit(id) {
+  const t=trips.find(t=>t.id===id); if(!t) return;
+  document.getElementById('editId').value=id;
+  document.getElementById('editDate').value=t.date;
+  document.getElementById('editFrom').value=t.from;
+  document.getElementById('editTo').value=t.to;
+  document.getElementById('editNote').value=t.note||'';
+  document.getElementById('editKm').value=t.km;
+  document.getElementById('editModal').classList.add('open');
+}
+function closeEdit(){document.getElementById('editModal').classList.remove('open');}
+function saveEdit() {
+  const id=parseInt(document.getElementById('editId').value);
+  const date=document.getElementById('editDate').value;
+  const from=document.getElementById('editFrom').value.trim();
+  const to=document.getElementById('editTo').value.trim();
+  const note=document.getElementById('editNote').value.trim();
+  const km=parseFloat(document.getElementById('editKm').value);
+  if(!date||!from||!to||!km){showToast('Udfyld alle felter',true);return;}
+  const idx=trips.findIndex(t=>t.id===id);
+  if(idx>-1) trips[idx]={id,date,from,to,note,km};
+  trips.sort((a,b)=>b.date.localeCompare(a.date));
+  save(); buildMonthFilter(); renderTable(trips); updateTotal(); closeEdit();
+  showToast('✓ Kørsel opdateret');
+}
+document.getElementById('editModal').addEventListener('click',e=>{
+  if(e.target===document.getElementById('editModal')) closeEdit();
+});
+
+/* ═══════════════════════════════════════════
+   MONTH FILTER
+═══════════════════════════════════════════ */
+function buildMonthFilter() {
+  const sel = document.getElementById('monthFilter');
+  const prev = sel.value;
+  const months = [...new Set(trips.map(t => {
+    if (!t.date) return null;
+    const d = new Date(t.date + 'T00:00:00');
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  }).filter(Boolean))].sort().reverse();
+
+  sel.innerHTML = '<option value="all">Alle måneder</option>';
+  months.forEach(m => {
+    const [y, mo] = m.split('-');
+    const label = new Date(+y, +mo-1, 1).toLocaleDateString('da-DK', {month:'long', year:'numeric'});
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = label;
+    sel.appendChild(opt);
+  });
+  if (prev && [...sel.options].some(o=>o.value===prev)) sel.value = prev;
+}
+
+function getFilteredTrips() {
+  const sel = document.getElementById('monthFilter').value;
+  if (sel === 'all') return trips;
+  return trips.filter(t => {
+    if (!t.date) return false;
+    const d = new Date(t.date + 'T00:00:00');
+    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    return key === sel;
+  });
+}
+
+/* ═══════════════════════════════════════════
+   RENDER TABLE
+═══════════════════════════════════════════ */
+function renderTable() {
+  const data = getFilteredTrips();
+  const tbody = document.getElementById('tripsBody');
+  const summary = document.getElementById('monthSummary');
+
+  if (!data.length) {
+    tbody.innerHTML=`<tr><td colspan="6"><div class="empty-state"><div class="icon">🚗</div><p>Ingen kørsler i denne periode</p></div></td></tr>`;
+    summary.textContent='';
+    return;
+  }
+
+  const totalKm = data.reduce((s,t)=>s+Number(t.km),0);
+  summary.textContent = `${data.length} ture · ${totalKm.toFixed(1)} km`;
+
+  // Group by month
+  const groups = {};
+  data.forEach(t => {
+    const mk = monthKey(t.date);
+    if (!groups[mk]) groups[mk] = [];
+    groups[mk].push(t);
+  });
+
+  let html = '';
+  Object.entries(groups).forEach(([month, items]) => {
+    const monthKm = items.reduce((s,t)=>s+Number(t.km),0);
+    html += `<tr class="month-group-row"><td colspan="6">${month} &mdash; ${monthKm.toFixed(1)} km</td></tr>`;
+    items.forEach(t => {
+      html += `<tr>
+        <td class="td-date">${fmt(t.date)}</td>
+        <td class="td-addr" title="${t.from}">${t.from}</td>
+        <td class="td-addr" title="${t.to}">${t.to}</td>
+        <td class="td-km">${Number(t.km).toFixed(1)} km</td>
+        <td class="td-note" title="${t.note||''}">${t.note||'—'}</td>
+        <td><div class="td-actions">
+          <button class="btn btn-edit" onclick="openEdit(${t.id})">✏️</button>
+          <button class="btn btn-danger" onclick="deleteTrip(${t.id})">Slet</button>
+        </div></td>
+      </tr>`;
+    });
+  });
+  tbody.innerHTML = html;
+}
+
+function updateTotal() {
+  document.getElementById('totalKmHeader').textContent =
+    trips.reduce((s,t)=>s+Number(t.km),0).toFixed(1)+' km';
+}
+
+/* ═══════════════════════════════════════════
+   PERIOD FILTER & STATS
+═══════════════════════════════════════════ */
+function applyFilter() {
+  const from=document.getElementById('filterFrom').value;
+  const to=document.getElementById('filterTo').value;
+  if(!from||!to){showToast('Vælg både fra- og til-dato',true);return;}
+  const filtered=trips.filter(t=>t.date>=from&&t.date<=to);
+  const km=filtered.reduce((s,t)=>s+Number(t.km),0);
+  const avg=filtered.length?km/filtered.length:0;
+  document.getElementById('statKm').textContent=km.toFixed(1)+' km';
+  document.getElementById('statTrips').textContent=filtered.length+' ture · '+fmt(from)+' – '+fmt(to);
+  document.getElementById('statReimb').textContent=(km*3.99).toFixed(0)+' kr';
+  document.getElementById('statAvg').textContent=avg.toFixed(1);
+  document.getElementById('statsRow').style.display='grid';
+}
+function clearFilter() {
+  document.getElementById('filterFrom').value='';
+  document.getElementById('filterTo').value='';
+  document.getElementById('statsRow').style.display='none';
+}
+
+/* ═══════════════════════════════════════════
+   EXCEL EXPORT
+═══════════════════════════════════════════ */
+function buildExcel(data, label) {
+  const rows = data.map(t=>({
+    'Dato':fmt(t.date),'Fra adresse':t.from,'Til adresse':t.to,
+    'Kilometer (km)':Number(t.km),'Note / Formål':t.note||'',
+    'Godtgørelse (kr)':Number((t.km*3.99).toFixed(2))
+  }));
+  const totalKm=data.reduce((s,t)=>s+Number(t.km),0);
+  rows.push({});
+  rows.push({'Dato':'TOTAL','Fra adresse':'','Til adresse':'','Kilometer (km)':totalKm,'Note / Formål':label,'Godtgørelse (kr)':Number((totalKm*3.99).toFixed(2))});
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:14},{wch:30},{wch:30},{wch:16},{wch:28},{wch:18}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Kørsel');
+  return wb;
+}
+function exportExcel() {
+  const fv=document.getElementById('filterFrom').value;
+  const tv=document.getElementById('filterTo').value;
+  let data=trips, label='Alle registreringer';
+  if(fv&&tv){data=trips.filter(t=>t.date>=fv&&t.date<=tv);label=`${fmt(fv)} – ${fmt(tv)}`;}
+  if(!data.length){showToast('Ingen data at eksportere',true);return;}
+  XLSX.writeFile(buildExcel(data,label),`Kørsel_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast('📥 Excel-fil downloadet');
+}
+function exportExcelFiltered() {
+  const data = getFilteredTrips();
+  if(!data.length){showToast('Ingen data at eksportere',true);return;}
+  const sel=document.getElementById('monthFilter');
+  const label=sel.value==='all'?'Alle ture':sel.options[sel.selectedIndex].text;
+  XLSX.writeFile(buildExcel(data,label),`Kørsel_${label.replace(/ /g,'_')}.xlsx`);
+  showToast('📥 Excel-fil downloadet');
+}
+</script>
+</body>
+</html>
